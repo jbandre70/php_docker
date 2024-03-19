@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+      args:
+        PHP_VERSION: '${PHP_VERSION}'
+    container_name: new-app
+    restart: always
+    working_dir: /var/www/
+    volumes:
+      - ../src:/var/www
+    links:
+    - php
+    - php-cli
+
+  php:
+      build:
+          context: ./php/fpm
+          args:
+              PHP_VERSION: '${PHP_VERSION}'
+      working_dir: /usr/share/nginx/html
+      volumes:
+          - ./php/fpm/php.ini:/usr/local/etc/php/conf.d/php.ini
+      links:
+          - database
+          - memcached
+
+  memcached:
+    image: memcached:latest
+
+  php-cli:
+    build:
+      context: ./php/php-cli
+      args:
+        PHP_VERSION: '${PHP_VERSION}'
+    working_dir: /usr/share/nginx/html
+    volumes:
+      - ./php/fpm/php.ini:/usr/local/etc/php/conf.d/php.ini
+
+  nginx:
+    image: nginx:1.19-alpine
+    container_name: new-nginx
+    restart: always
+    ports:
+      - 8000:80
+    volumes:
+      - ../src:/var/www
+      - ./nginx:/etc/nginx/conf.d
+
+  database:
+    image: mysql:latest
+    restart: unless-stopped
+    ports:
+      - '3306:3306'
+    env_file: .env
+    environment:
+      MYSQL_ROOT_PASSWORD: '${MYSQL_ROOT_PASSWORD}'
+      MYSQL_DATABASE: '${MYSQL_DATABASE}'
+      MYSQL_USER: '${MYSQL_USER}'
+      MYSQL_PASSWORD: '${MYSQL_PASSWORD}'
+      MYSQL_ROOT_HOST: "%"
+    volumes:
+      - db-data:/var/lib/mysql
+    networks:
+      - new-network
+    deploy:
+      resources:
+        limits:
+          memory: 2048m
+
+  adminer:
+    image: adminer:latest
+    depends_on:
+      - database
+    restart: unless-stopped
+    ports:
+      - 8080:8080
+    env_file: .env
+    environment:
+      PMA_HOST: database
+      MYSQL_ROOT_PASSWORD: '${MYSQL_ROOT_PASSWORD}'
+    networks:
+      - new-network
+
+volumes:
+  db-data:
+
+networks:
+  new-network:
+    driver: bridge
